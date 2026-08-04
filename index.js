@@ -5,8 +5,8 @@ const app = express();
 app.use(express.json());
 
 // Substitua pelas chaves que você copiou no celular
-const supabaseUrl = 'SUA_URL_DO_SUPABASE';
-const supabaseKey = 'SUA_CHAVE_ANON_PUBLIC';
+const supabaseUrl = 'https://yqxtabfebukvqexvaejs.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxeHRhYmZlYnVrdnFleHZhZWpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU4NzIzOTksImV4cCI6MjEwMTQ0ODM5OX0.zFgeJkAkd3RHvwWnAgA_uiuYav02_0rtOhW7meQ6_F0';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 app.post('/api/validar', async (req, res) => {
