@@ -5,10 +5,7 @@ const app = express();
 
 app.use(express.json());
 
-// ================================
 // CORS
-// ================================
-
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header(
@@ -27,10 +24,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// ================================
 // SUPABASE
-// ================================
-
 const supabaseUrl =
     'https://yqxtabfebukvqexvaejs.supabase.co';
 
@@ -46,10 +40,7 @@ const supabase = createClient(
     supabaseKey
 );
 
-// ================================
-// STATUS DA API
-// ================================
-
+// STATUS
 app.get('/', (req, res) => {
     return res.json({
         status: 'API Online!',
@@ -57,17 +48,16 @@ app.get('/', (req, res) => {
     });
 });
 
-// ================================
-// VALIDAR KEY NO ROBLOX
-// ================================
-
-app.post('/api/validar', async (req, res) => {
+// VALIDAR KEY - GET
+app.get('/api/validar', async (req, res) => {
     try {
-        const { key, userid } = req.body;
+        const { key, userid } = req.query;
 
         if (!key || !userid) {
             return res.json({
                 valido: false,
+                valida: false,
+                success: false,
                 mensagem: 'Dados incompletos.'
             });
         }
@@ -79,10 +69,7 @@ app.post('/api/validar', async (req, res) => {
         const idCliente = String(userid)
             .trim();
 
-        // ================================
-        // BUSCAR KEY
-        // ================================
-
+        // Procura a Key
         const { data, error } = await supabase
             .from('keys_sistema')
             .select('id, chave, usada, user_id')
@@ -97,60 +84,45 @@ app.post('/api/validar', async (req, res) => {
 
             return res.status(500).json({
                 valido: false,
+                valida: false,
+                success: false,
                 mensagem: 'Erro ao consultar o sistema.'
             });
         }
 
-        // ================================
-        // KEY NÃO EXISTE
-        // ================================
-
+        // Key não encontrada
         if (!data) {
             return res.json({
                 valido: false,
+                valida: false,
+                success: false,
                 mensagem: 'Key não encontrada.'
             });
         }
 
-        // ================================
-        // KEY JÁ CONSUMIDA
-        // ================================
-
+        // Key já consumida no Roblox
         if (data.usada === true) {
             return res.json({
                 valido: false,
+                valida: false,
+                success: false,
                 mensagem: 'Esta key já foi utilizada no Roblox.'
             });
         }
 
-        // ================================
-        // KEY AINDA NÃO FOI VINCULADA
-        // ================================
-
+        // Key ainda não vinculada no Discord
         if (!data.user_id) {
             return res.json({
                 valido: false,
+                valida: false,
+                success: false,
                 mensagem:
                     'Esta key ainda não foi vinculada a um cliente no Discord.'
             });
         }
 
-        /*
-        ========================================
-        FORMATO SALVO PELO DISCORD
-
-        NomeDiscord | IDCliente | DiscordID
-
-        Exemplo:
-
-        Lucas | 123456789 | 987654321
-
-        Precisamos pegar:
-
-        123456789
-        ========================================
-        */
-
+        // Formato:
+        // NomeDiscord | IDCliente | DiscordID
         const partes = String(data.user_id)
             .split('|')
             .map(part => part.trim());
@@ -163,49 +135,39 @@ app.post('/api/validar', async (req, res) => {
 
             return res.status(500).json({
                 valido: false,
+                valida: false,
+                success: false,
                 mensagem: 'Vínculo da Key inválido.'
             });
         }
 
-        // Segundo campo = ID do cliente
         const idClienteSalvo = partes[1];
 
-        // ================================
-        // COMPARAR ID DO CLIENTE
-        // ================================
-
+        // Confere o ID do cliente
         if (idClienteSalvo !== idCliente) {
             return res.json({
                 valido: false,
+                valida: false,
+                success: false,
                 mensagem: 'Esta key pertence a outro usuário.'
             });
         }
 
-        /*
-        ========================================
-        ID CORRETO
-
-        Agora a Key é realmente consumida
-        pelo Roblox.
-
-        false → true
-
-        O user_id NÃO é alterado.
-        ========================================
-        */
-
-        const { data: atualizado, error: updateError } =
-            await supabase
-                .from('keys_sistema')
-                .update({
-                    usada: true
-                })
-                .eq('id', data.id)
-                .eq('usada', false)
-                .select(
-                    'id, chave, usada, user_id'
-                )
-                .maybeSingle();
+        // Consome a Key
+        const {
+            data: atualizado,
+            error: updateError
+        } = await supabase
+            .from('keys_sistema')
+            .update({
+                usada: true
+            })
+            .eq('id', data.id)
+            .eq('usada', false)
+            .select(
+                'id, chave, usada, user_id'
+            )
+            .maybeSingle();
 
         if (updateError) {
             console.error(
@@ -215,34 +177,29 @@ app.post('/api/validar', async (req, res) => {
 
             return res.status(500).json({
                 valido: false,
+                valida: false,
+                success: false,
                 mensagem:
                     'Não foi possível consumir a Key.'
             });
         }
 
-        /*
-        ========================================
-        PROTEÇÃO CONTRA DUPLO USO
-
-        Se outro pedido consumiu a Key antes,
-        atualizado será vazio.
-        ========================================
-        */
-
+        // Evita dupla utilização
         if (!atualizado) {
             return res.json({
                 valido: false,
+                valida: false,
+                success: false,
                 mensagem:
                     'Esta key já foi utilizada.'
             });
         }
 
-        // ================================
         // SUCESSO
-        // ================================
-
         return res.json({
             valido: true,
+            valida: true,
+            success: true,
             mensagem:
                 'Key validada e consumida com sucesso!',
             key: atualizado.chave,
@@ -258,22 +215,27 @@ app.post('/api/validar', async (req, res) => {
 
         return res.status(500).json({
             valido: false,
+            valida: false,
+            success: false,
             mensagem:
                 'Erro interno no servidor.'
         });
     }
 });
 
-// ================================
-// EXPORT
-// ================================
+// Também aceita POST caso queira testar pelo navegador/API
+app.post('/api/validar', async (req, res) => {
+    req.query = {
+        key: req.body?.key,
+        userid: req.body?.userid
+    };
+
+    return app._router.handle(req, res);
+});
 
 module.exports = app;
 
-// ================================
-// SERVIDOR LOCAL
-// ================================
-
+// Servidor local
 if (process.env.NODE_ENV !== 'production') {
     const PORT = process.env.PORT || 3000;
 
@@ -282,4 +244,4 @@ if (process.env.NODE_ENV !== 'production') {
             `✅ Servidor rodando na porta ${PORT}`
         );
     });
-    }
+}
