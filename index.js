@@ -5,7 +5,10 @@ const app = express();
 
 app.use(express.json());
 
+// ================================
 // CORS
+// ================================
+
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header(
@@ -24,12 +27,13 @@ app.use((req, res, next) => {
     next();
 });
 
-// Supabase
-const supabaseUrl = 'https://yqxtabfebukvqexvaejs.supabase.co';
+// ================================
+// SUPABASE
+// ================================
 
-// IMPORTANTE:
-// Coloque a chave anon em uma variável de ambiente.
-// Não coloque service_role aqui.
+const supabaseUrl =
+    'https://yqxtabfebukvqexvaejs.supabase.co';
+
 const supabaseKey = process.env.SUPABASE_KEY;
 
 if (!supabaseKey) {
@@ -37,9 +41,15 @@ if (!supabaseKey) {
     process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(
+    supabaseUrl,
+    supabaseKey
+);
 
-// Teste da API
+// ================================
+// STATUS DA API
+// ================================
+
 app.get('/', (req, res) => {
     return res.json({
         status: 'API Online!',
@@ -47,27 +57,9 @@ app.get('/', (req, res) => {
     });
 });
 
-/*
-====================================================
-VALIDAÇÃO DA KEY NO ROBLOX
-====================================================
-
-Fluxo:
-
-Discord:
-    usada = false
-    user_id = "Nome | DiscordID"
-
-Roblox:
-    envia key + userid
-
-API:
-    1. Procura a Key.
-    2. Verifica se ela já foi consumida.
-    3. Confere o ID do Roblox com o ID vinculado.
-    4. Se estiver correto, muda usada para true.
-====================================================
-*/
+// ================================
+// VALIDAR KEY NO ROBLOX
+// ================================
 
 app.post('/api/validar', async (req, res) => {
     try {
@@ -80,10 +72,17 @@ app.post('/api/validar', async (req, res) => {
             });
         }
 
-        const chaveLimpa = String(key).trim().toUpperCase();
-        const idUsuario = String(userid).trim();
+        const chaveLimpa = String(key)
+            .trim()
+            .toUpperCase();
 
-        // Busca a Key
+        const idCliente = String(userid)
+            .trim();
+
+        // ================================
+        // BUSCAR KEY
+        // ================================
+
         const { data, error } = await supabase
             .from('keys_sistema')
             .select('id, chave, usada, user_id')
@@ -91,13 +90,20 @@ app.post('/api/validar', async (req, res) => {
             .maybeSingle();
 
         if (error) {
-            console.error('❌ Erro ao consultar Supabase:', error);
+            console.error(
+                '❌ Erro ao consultar Supabase:',
+                error
+            );
 
             return res.status(500).json({
                 valido: false,
                 mensagem: 'Erro ao consultar o sistema.'
             });
         }
+
+        // ================================
+        // KEY NÃO EXISTE
+        // ================================
 
         if (!data) {
             return res.json({
@@ -106,11 +112,9 @@ app.post('/api/validar', async (req, res) => {
             });
         }
 
-        /*
-        ==============================================
-        A KEY JÁ FOI CONSUMIDA NO ROBLOX
-        ==============================================
-        */
+        // ================================
+        // KEY JÁ CONSUMIDA
+        // ================================
 
         if (data.usada === true) {
             return res.json({
@@ -119,38 +123,58 @@ app.post('/api/validar', async (req, res) => {
             });
         }
 
-        /*
-        ==============================================
-        VERIFICA O DONO DA KEY
-        ==============================================
-
-        O Discord salva:
-
-        user_id = "Nome | 123456789"
-
-        Aqui extraímos somente o ID para comparar
-        com o userid enviado pelo Roblox.
-        */
+        // ================================
+        // KEY AINDA NÃO FOI VINCULADA
+        // ================================
 
         if (!data.user_id) {
             return res.json({
                 valido: false,
-                mensagem: 'Esta key ainda não foi vinculada a uma conta Discord.'
+                mensagem:
+                    'Esta key ainda não foi vinculada a um cliente no Discord.'
             });
         }
 
-        const userIdSalvo = String(data.user_id)
-            .split('|')
-            .pop()
-            .trim();
-
         /*
-        ==============================================
-        ID DIFERENTE
-        ==============================================
+        ========================================
+        FORMATO SALVO PELO DISCORD
+
+        NomeDiscord | IDCliente | DiscordID
+
+        Exemplo:
+
+        Lucas | 123456789 | 987654321
+
+        Precisamos pegar:
+
+        123456789
+        ========================================
         */
 
-        if (userIdSalvo !== idUsuario) {
+        const partes = String(data.user_id)
+            .split('|')
+            .map(part => part.trim());
+
+        if (partes.length < 2) {
+            console.error(
+                '❌ Formato inválido de user_id:',
+                data.user_id
+            );
+
+            return res.status(500).json({
+                valido: false,
+                mensagem: 'Vínculo da Key inválido.'
+            });
+        }
+
+        // Segundo campo = ID do cliente
+        const idClienteSalvo = partes[1];
+
+        // ================================
+        // COMPARAR ID DO CLIENTE
+        // ================================
+
+        if (idClienteSalvo !== idCliente) {
             return res.json({
                 valido: false,
                 mensagem: 'Esta key pertence a outro usuário.'
@@ -158,74 +182,104 @@ app.post('/api/validar', async (req, res) => {
         }
 
         /*
-        ==============================================
-        DONO CORRETO
-        ==============================================
+        ========================================
+        ID CORRETO
 
-        Agora sim a Key é consumida.
+        Agora a Key é realmente consumida
+        pelo Roblox.
 
-        usada:
         false → true
 
         O user_id NÃO é alterado.
+        ========================================
         */
 
-        const { data: atualizado, error: updateError } = await supabase
-            .from('keys_sistema')
-            .update({
-                usada: true
-            })
-            .eq('id', data.id)
-            .eq('usada', false)
-            .select('id, chave, usada, user_id')
-            .maybeSingle();
+        const { data: atualizado, error: updateError } =
+            await supabase
+                .from('keys_sistema')
+                .update({
+                    usada: true
+                })
+                .eq('id', data.id)
+                .eq('usada', false)
+                .select(
+                    'id, chave, usada, user_id'
+                )
+                .maybeSingle();
 
         if (updateError) {
-            console.error('❌ Erro ao consumir Key:', updateError);
+            console.error(
+                '❌ Erro ao consumir Key:',
+                updateError
+            );
 
             return res.status(500).json({
                 valido: false,
-                mensagem: 'Não foi possível consumir a Key.'
+                mensagem:
+                    'Não foi possível consumir a Key.'
             });
         }
 
         /*
-        Se outro processo consumiu a Key exatamente
-        antes deste update, não liberamos.
+        ========================================
+        PROTEÇÃO CONTRA DUPLO USO
+
+        Se outro pedido consumiu a Key antes,
+        atualizado será vazio.
+        ========================================
         */
 
         if (!atualizado) {
             return res.json({
                 valido: false,
-                mensagem: 'Esta key já foi utilizada.'
+                mensagem:
+                    'Esta key já foi utilizada.'
             });
         }
 
+        // ================================
+        // SUCESSO
+        // ================================
+
         return res.json({
             valido: true,
-            mensagem: 'Key validada e consumida com sucesso!',
+            mensagem:
+                'Key validada e consumida com sucesso!',
             key: atualizado.chave,
-            userid: idUsuario,
+            userid: idCliente,
             usada: true
         });
 
     } catch (err) {
-        console.error('❌ Erro interno:', err);
+        console.error(
+            '❌ Erro interno:',
+            err
+        );
 
         return res.status(500).json({
             valido: false,
-            mensagem: 'Erro interno no servidor.'
+            mensagem:
+                'Erro interno no servidor.'
         });
     }
 });
 
+// ================================
+// EXPORT
+// ================================
+
 module.exports = app;
 
-// Desenvolvimento local
+// ================================
+// SERVIDOR LOCAL
+// ================================
+
 if (process.env.NODE_ENV !== 'production') {
     const PORT = process.env.PORT || 3000;
 
     app.listen(PORT, () => {
-        console.log(`✅ Servidor rodando na porta ${PORT}`);
+        console.log(
+            `✅ Servidor rodando na porta ${PORT}`
+        );
     });
-}
+    }
